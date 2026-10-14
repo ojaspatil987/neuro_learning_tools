@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPIKE-distance</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]})"></script>
+<style>
+:root{
+  color-scheme: light;
+  --bg:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#8a8984; --grid:#e6e5e0;
+  --panel:#f3f2ee; --c1:#2a78d6; --c2:#eb6834; --accent:#6250d6;
+  --hm0:#e3eefc; --hm1:#0d366b;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --bg:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#8d8c85; --grid:#33332f;
+    --panel:#232321; --c1:#3987e5; --c2:#d95926; --accent:#9085e9;
+    --hm0:#1f2a38; --hm1:#9ec5f4;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#8d8c85; --grid:#33332f;
+  --panel:#232321; --c1:#3987e5; --c2:#d95926; --accent:#9085e9;
+  --hm0:#1f2a38; --hm1:#9ec5f4;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink)}
+body{font:18px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:48px 16px 96px}
+h1{font-size:44px;line-height:1.1;margin:0 0 8px;letter-spacing:-.5px}
+h2{font-size:26px;margin:72px 0 8px;letter-spacing:-.2px}
+p{margin:12px 0;color:var(--ink)}
+.sub{color:var(--ink2);font-size:20px;margin:0 0 28px}
+.fig{margin:22px 0 6px;position:relative}
+.fig canvas{display:block;width:100%;touch-action:pan-y;cursor:crosshair}
+.hint{font-size:14px;color:var(--muted);margin:4px 0 0}
+.c1{color:var(--c1);font-weight:600}.c2{color:var(--c2);font-weight:600}
+.readout{white-space:pre-wrap;font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink2);
+  background:var(--panel);border-radius:8px;padding:10px 14px;margin:8px 0;overflow-x:auto}
+.readout b{color:var(--ink);font-weight:600}
+.big{font-size:22px;color:var(--ink)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:14px;color:var(--ink2);margin:6px 0 0}
+.legend > span{display:inline-flex;align-items:center;gap:6px}
+.legend i{display:inline-block;width:16px;height:0;border-top:2px solid}
+.legend i.dash{border-top-style:dashed}
+.controls{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;margin:10px 0;font-size:15px;color:var(--ink2)}
+.controls label{display:inline-flex;align-items:center;gap:8px}
+.controls input[type=range]{width:140px;accent-color:var(--accent)}
+button{font:inherit;font-size:14px;color:var(--ink);background:var(--panel);border:1px solid var(--grid);
+  border-radius:999px;padding:5px 14px;cursor:pointer}
+button:hover{border-color:var(--muted)}
+button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.katex-display{margin:14px 0;overflow-x:auto;overflow-y:hidden;padding:2px 0}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:13px;
+  padding:3px 8px;border-radius:6px;white-space:nowrap;display:none;z-index:2}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:560px){.row2{grid-template-columns:1fr} h1{font-size:34px}}
+footer{margin-top:80px;font-size:14px;color:var(--muted)}
+footer a{color:var(--ink2)}
+hr{border:0;border-top:1px solid var(--grid);margin:64px 0 0}
+</style>
+</head>
+<body>
+<main>
+
+<h1>SPIKE-distance</h1>
+<p class="sub">How different are two spike trains, moment by moment?</p>
+
+<div class="fig" id="hero"></div>
+<p class="hint">Two neurons. The curve below says how out of sync they are at each instant. The average height of the curve is the SPIKE-distance.</p>
+
+<!-- 1 -->
+<h2>A spike train is a list of times</h2>
+<p>A spike has no amplitude and no shape. All it has is <em>when</em>.</p>
+<div class="fig" id="f1"></div>
+<p class="hint">Drag a spike · click empty space to add one · double-click (or drag off the row) to delete</p>
+<p>We want a number that is 0 for identical trains and grows as they disagree, with <b>no bin width and no time constant</b>. We also want it <b>time-resolved</b>, a curve \(S(t)\) rather than a single number.</p>
+
+<!-- 2 -->
+<h2>Stand at one instant</h2>
+<p>Pick a time \(t\). In each train, \(t\) falls between a previous spike and a following one.</p>
+$$t_\mathrm{P}^{(n)}=\max_i\{t_i^{(n)}\le t\},\qquad t_\mathrm{F}^{(n)}=\min_i\{t_i^{(n)}>t\},\qquad x_\mathrm{ISI}^{(n)}=t_\mathrm{F}^{(n)}-t_\mathrm{P}^{(n)}$$
+<div class="fig" id="f2"></div>
+<p class="hint">Drag anywhere (outside the spikes) to move \(t\).</p>
+<div class="readout" id="r2"></div>
+<p>So every instant is boxed in by four <b>corner spikes</b>. The dashed ticks at \(0\) and \(T\) are auxiliary spikes, added so that the first and last intervals exist.</p>
+
+<!-- 3 -->
+<h2>How far is each corner from the other train?</h2>
+<p>For each corner spike, find the nearest spike in the <em>other</em> train.</p>
+$$\Delta t_\mathrm{P}^{(1)}=\min_i\,\big|\,t_\mathrm{P}^{(1)}-t_i^{(2)}\big|$$
+<div class="fig" id="f3"></div>
+<div class="readout" id="r3"></div>
+<p>That gives four mismatches. They belong to the spikes, not to \(t\), so they stay fixed across the whole interval.</p>
+
+<!-- 4 -->
+<h2>The nearer corner gets the bigger vote</h2>
+$$S_1(t)=\frac{\Delta t_\mathrm{P}^{(1)}\,x_\mathrm{F}^{(1)}+\Delta t_\mathrm{F}^{(1)}\,x_\mathrm{P}^{(1)}}{x_\mathrm{ISI}^{(1)}},\qquad x_\mathrm{P}=t-t_\mathrm{P},\;\; x_\mathrm{F}=t_\mathrm{F}-t$$
+<p>This is just linear interpolation: \(S_1=\Delta t_\mathrm{P}\) at the previous spike and \(S_1=\Delta t_\mathrm{F}\) at the next. Dot size shows each corner's weight.</p>
+<div class="fig" id="f4"></div>
+<div class="legend"><span><i style="border-color:var(--c1)"></i>\(S_1(t)\)</span><span><i style="border-color:var(--c2)"></i>\(S_2(t)\)</span></div>
+<div class="readout" id="r4"></div>
+<p>These are still in units of time. A 5&nbsp;ms mismatch matters if spikes are 10&nbsp;ms apart, and hardly at all if they are 1&nbsp;s apart.</p>
+
+<!-- 5 -->
+<h2>Divide out the time scale</h2>
+$$S(t)=\frac{S_1\,x_\mathrm{ISI}^{(2)}+S_2\,x_\mathrm{ISI}^{(1)}}{2\,\big\langle x_\mathrm{ISI}^{(n)}\big\rangle_n^{2}}$$
+<p>Each train's mismatch is weighted by the <em>other</em> train's interval, then divided by the squared mean interval. The result is dimensionless, lies in \([0,1]\), and is <b>piecewise linear</b>. It is zero only where the spikes coincide.</p>
+<div class="fig" id="f5"></div>
+<div class="legend"><span><i style="border-color:var(--ink)"></i>\(S(t)\)</span><span id="lg5" style="display:none"><i class="dash" style="border-color:var(--accent)"></i>\(S'(t)=\dfrac{S_1+S_2}{2\langle x_\mathrm{ISI}\rangle}\) (no cross-weighting)</span></div>
+<div class="controls"><label><input type="checkbox" id="sp5"> show \(S'\), the simpler normalisation</label></div>
+<div class="readout" id="r5"></div>
+
+<!-- 6 -->
+<h2>Average it</h2>
+$$D_S=\frac1T\int_0^T S(t)\,dt$$
+<div class="fig" id="f6"></div>
+<div class="readout" id="r6"></div>
+
+<p style="margin-top:36px">Now copy a train and jitter every spike by \(\sigma\), measured in units of the mean ISI.</p>
+<div class="row2">
+  <div><div class="fig" id="f6b"></div></div>
+  <div><div class="fig" id="f6c"><canvas></canvas></div>
+  <p class="hint">Drag on this plot to set \(\sigma\). The line is the mean over 30 random trains. The dot is the pair on the left.</p></div>
+</div>
+<p>Spike times only enter through ratios, so rescaling time, \(t\to\lambda t\), leaves \(S(t)\) unchanged. There is nothing to tune.</p>
+
+<!-- 7 -->
+<h2>Playground</h2>
+<p>Try to predict the curve before you let go.</p>
+<div class="controls" id="pre7"></div>
+<div class="fig" id="f7"></div>
+<div class="controls">
+  <label><input type="checkbox" id="o7c" checked> corners</label>
+  <label><input type="checkbox" id="o7d" checked> \(\Delta t\)</label>
+  <label><input type="checkbox" id="o7a" checked> area</label>
+</div>
+<div class="readout" id="r7"></div>
+
+<!-- 8 -->
+<h2>More than two neurons</h2>
+$$S^a(t)=\frac{2}{N(N-1)}\sum_{n&lt;m}S^{nm}(t),\qquad D_S^a=\frac1T\int_0^T S^a(t)\,dt$$
+<p>Average over every pair. Because you can freeze any instant, you also get the full pairwise matrix: who is synchronous with whom, <em>right now</em>.</p>
+<div class="controls" id="pre8"></div>
+<div class="controls" id="ctl8"></div>
+<div class="fig" id="f8"></div>
+<div class="fig" id="f8m"><canvas></canvas><div class="tip" id="tip8"></div></div>
+<div class="readout" id="r8"></div>
+
+<!-- 9 -->
+<h2>No peeking at the future</h2>
+<p>\(S(t)\) needs the <em>following</em> spikes, so you only know it after the fact. For online use, keep only past information:</p>
+$$S_r(t)=\frac{\Delta t_\mathrm{P}^{(1)}+\Delta t_\mathrm{P}^{(2)}}{4\,\big\langle x_\mathrm{P}^{(n)}\big\rangle_n},\qquad \text{(nearest spikes searched only among } t_i\le t)$$
+<div class="controls"><button id="play9">▶ play</button>
+  <label>causal smoothing window <input type="range" id="w9" min="0" max="2" step="0.05" value="0"> <span id="w9v">0</span></label></div>
+<div class="fig" id="f9"></div>
+<div class="legend"><span><i style="border-color:var(--ink)"></i>\(S_r(t)\)</span><span id="lg9" style="display:none"><i style="border-color:var(--accent)"></i>smoothed \(S_r\)</span><span><i class="dash" style="border-color:var(--muted)"></i>\(S(t)\) (needs the future)</span></div>
+<p>\(S_r\) peaks just after a spike: one neuron has fired and the other hasn't <em>yet</em>. Only later spikes can resolve that uncertainty. A causal moving average smooths the peaks out.</p>
+
+<hr>
+<footer>
+<p>Built from T. Kreuz, <a href="http://www.scholarpedia.org/article/SPIKE-distance">SPIKE-distance</a>, Scholarpedia 7(12):30652 (2012), and Kreuz, Chicharro, Houghton, Andrzejak &amp; Mormann, <i>J Neurophysiol</i> 109:1457 (2013). Auxiliary edge spikes follow that definition. Reference implementations: <a href="https://github.com/mariomulansky/PySpike">PySpike</a>, SPIKY.</p>
+</footer>
+</main>
+
+<script>
+"use strict";
+/* ---------- colours ---------- */
+const COL = {};
+function readCols(){
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ['bg','ink','ink2','muted','grid','panel','c1','c2','accent','hm0','hm1']) COL[k] = cs.getPropertyValue('--'+k).trim();
+}
+readCols();
+const hex2rgb = h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16));
+function ramp(v){ const a = hex2rgb(COL.hm0), b = hex2rgb(COL.hm1); v = Math.max(0,Math.min(1,v));
+  return `rgb(${a.map((x,i)=>Math.round(x+(b[i]-x)*v)).join(',')})`; }
+function alpha(hex, a){ const [r,g,b] = hex2rgb(hex); return `rgba(${r},${g},${b},${a})`; }
+
+/* ---------- random ---------- */
+function rng(seed){ return function(){ seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+  let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+  return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gauss(r){ return Math.sqrt(-2*Math.log(r()+1e-12))*Math.cos(2*Math.PI*r()); }
+function poisson(r, rate, a, b){ const s = []; let t = a; for(;;){ t += -Math.log(r()+1e-12)/rate; if (t >= b) return s; s.push(t); } }
+
+/* ---------- SPIKE-distance maths ---------- */
+const EPS = 1e-9;
+function withAux(s, T){
+  const a = s.filter(x => x > EPS && x < T-EPS).sort((x,y)=>x-y);
+  const out = [0];
+  for (const x of a) if (x - out[out.length-1] > EPS) out.push(x);
+  if (T - out[out.length-1] > EPS) out.push(T); else out[out.length-1] = T;
+  return out;
+}
+function idx(a, t){ let lo = 0, hi = a.length-1; while (hi-lo > 1){ const m = (lo+hi)>>1; if (a[m] <= t) lo = m; else hi = m; } return lo; }
+function nearestIdx(a, x){ let lo = 0, hi = a.length-1; while (lo < hi){ const m = (lo+hi)>>1; if (a[m] < x) lo = m+1; else hi = m; }
+  return (lo > 0 && x - a[lo-1] <= a[lo] - x) ? lo-1 : lo; }
+function nearestUpTo(a, x, hi){ if (a[hi] <= x) return x - a[hi];
+  let lo = 0, h = hi; while (lo < h){ const m = (lo+h)>>1; if (a[m] < x) lo = m+1; else h = m; }
+  let d = a[lo] - x; if (lo > 0) d = Math.min(d, x - a[lo-1]); return d; }
+function pair(s1, s2, T){
+  const a = withAux(s1,T), b = withAux(s2,T);
+  return { a, b, T, da: a.map(x => Math.abs(b[nearestIdx(b,x)] - x)), db: b.map(x => Math.abs(a[nearestIdx(a,x)] - x)) };
+}
+function corner(a, d, k, t){ const tP = a[k], tF = a[k+1], isi = tF - tP, xP = t - tP, xF = tF - t;
+  return { k, tP, tF, isi, xP, xF, dP: d[k], dF: d[k+1], S: (d[k]*xF + d[k+1]*xP)/isi }; }
+function local(P, t, ka, kb){
+  if (ka === undefined){ ka = idx(P.a,t); kb = idx(P.b,t); }
+  const A = corner(P.a,P.da,ka,t), B = corner(P.b,P.db,kb,t), m = (A.isi + B.isi)/2;
+  return { A, B, S: (A.S*B.isi + B.S*A.isi)/(2*m*m), Sp: (A.S + B.S)/(2*m) };
+}
+function uniq(arr){ arr.sort((x,y)=>x-y); const o = [arr[0]]; for (const x of arr) if (x - o[o.length-1] > EPS) o.push(x); return o; }
+// S is linear between consecutive spikes of the merged train, so D_S is an exact sum of trapezoids.
+function profile(P){
+  const br = uniq(P.a.concat(P.b)), pts = []; let D = 0, Dp = 0;
+  for (let i = 0; i < br.length-1; i++){
+    const u = br[i], v = br[i+1], m = (u+v)/2, ka = idx(P.a,m), kb = idx(P.b,m);
+    const su = local(P,u,ka,kb), sv = local(P,v,ka,kb);
+    pts.push([u,su.S,su.Sp],[v,sv.S,sv.Sp]);
+    D += (su.S+sv.S)/2*(v-u); Dp += (su.Sp+sv.Sp)/2*(v-u);
+  }
+  return { pts, D: D/P.T, Dp: Dp/P.T };
+}
+function rtLocal(P, t){
+  const ka = idx(P.a,t), kb = idx(P.b,t);
+  const d1 = nearestUpTo(P.b, P.a[ka], kb), d2 = nearestUpTo(P.a, P.b[kb], ka);
+  const xs = (t - P.a[ka]) + (t - P.b[kb]);
+  return xs < 1e-12 ? 0 : (d1 + d2)/(2*xs);
+}
+const f2 = x => x.toFixed(2), f3 = x => x.toFixed(3);
+
+/* ---------- figure ---------- */
+const FIGS = [];
+class Fig {
+  constructor(host, o){
+    this.host = host;
+    this.o = Object.assign({ T:10, t:4.3, editable:false, cursor:false, aux:false, corners:false, isi:false,
+      deltas:false, weights:false, plot:null, plotH:150, area:false, showSp:false, win:0, futureFade:false }, o);
+    this.trains = o.trains.map(s => s.slice());
+    this.c = document.createElement('canvas'); host.appendChild(this.c);
+    this.ctx = this.c.getContext('2d');
+    this.hooks = [];
+    this.bind();
+    FIGS.push(this);
+    new ResizeObserver(() => { this.layout(); this.draw(); }).observe(host);
+    this.compute(); this.layout();
+  }
+  get T(){ return this.o.T; }
+  setTrains(tr, T){ this.trains = tr.map(s => s.slice()); if (T) this.o.T = T; this.o.t = Math.min(this.o.t, this.o.T); this.update(); }
+  compute(){
+    const N = this.trains.length, T = this.T;
+    if (N === 2){
+      this.P = pair(this.trains[0], this.trains[1], T);
+      this.prof = profile(this.P);
+      this.D = this.prof.D;
+      if (this.o.plot === 'Sr'){
+        const G = 900; this.sr = new Float64Array(G); this.srT = new Float64Array(G);
+        for (let g = 0; g < G; g++){ const t = T*(g+0.5)/G; this.srT[g] = t; this.sr[g] = rtLocal(this.P, t); }
+        this.smooth();
+      }
+    } else {
+      this.pairs = []; let D = 0;
+      for (let i = 0; i < N; i++) for (let j = i+1; j < N; j++){
+        const P = pair(this.trains[i], this.trains[j], T), pr = profile(P);
+        P.i = i; P.j = j; P.D = pr.D; D += pr.D; this.pairs.push(P);
+      }
+      this.D = D/this.pairs.length;
+      const G = 700; this.gT = new Float64Array(G); this.gS = new Float64Array(G);
+      for (let g = 0; g < G; g++){ const t = T*g/(G-1); this.gT[g] = t; let s = 0;
+        for (const P of this.pairs) s += local(P,t).S; this.gS[g] = s/this.pairs.length; }
+    }
+  }
+  smooth(){
+    const w = this.o.win, G = this.sr.length, dt = this.T/G, n = Math.max(1, Math.round(w/dt));
+    this.srs = new Float64Array(G); let acc = 0;
+    for (let g = 0; g < G; g++){ acc += this.sr[g]; if (g >= n) acc -= this.sr[g-n]; this.srs[g] = acc/Math.min(g+1,n); }
+  }
+  layout(){
+    const o = this.o, N = this.trains.length, two = N === 2;
+    let y = o.cursor ? 28 : 10; this.rows = [];
+    const rh = two ? 34 : Math.max(6, Math.min(22, 240/N));
+    for (let r = 0; r < N; r++){
+      if (two && r === 0 && o.isi) y += 26;
+      if (two && r === 1) y += 10 + (o.deltas ? 24 : 0);
+      this.rows.push({ y, h: rh }); y += rh;
+      if (two && r === 0 && o.deltas) y += 24;
+      if (two && r === 1 && o.isi) y += 26;
+    }
+    this.trainsBottom = y;
+    if (o.plot){ y += 18; this.plotR = { y, h: o.plotH }; y += o.plotH; } else this.plotR = null;
+    y += 24;
+    const W = this.host.clientWidth || 600, dpr = window.devicePixelRatio || 1;
+    this.W = W; this.H = y; this.L = 38; this.R = W - 12;
+    this.c.width = W*dpr; this.c.height = y*dpr; this.c.style.height = y + 'px';
+    this.ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  X(t){ return this.L + (this.R - this.L)*t/this.T; }
+  Ti(x){ return (x - this.L)/(this.R - this.L)*this.T; }
+  Y(v, ymax){ const p = this.plotR; return p.y + p.h - p.h*v/ymax; }
+  update(){ this.compute(); this.layout(); this.draw(); this.hooks.forEach(h => h(this)); }
+  setT(t){ this.o.t = Math.max(0, Math.min(this.T, t)); this.draw(); this.hooks.forEach(h => h(this)); }
+  rowAt(y){ return this.rows.findIndex(r => y >= r.y - 6 && y <= r.y + r.h + 6); }
+  spikeAt(r, x){ const s = this.trains[r]; let best = -1, bd = 9;
+    s.forEach((t,i) => { const d = Math.abs(this.X(t) - x); if (d < bd){ bd = d; best = i; } }); return best; }
+  bind(){
+    const c = this.c, pos = e => { const b = c.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top }; };
+    const clampT = t => Math.max(this.T*0.002, Math.min(this.T*0.998, t));
+    c.addEventListener('pointerdown', e => {
+      const { x, y } = pos(e); if (this.onTouch) this.onTouch();
+      const r = this.rowAt(y);
+      if (this.o.editable && r >= 0){
+        let i = this.spikeAt(r, x);
+        if (i < 0){ this.trains[r].push(clampT(this.Ti(x))); i = this.trains[r].length-1; this.update(); }
+        this.drag = { r, i };
+      } else if (this.o.cursor){ this.drag = { cursor: true }; this.setT(this.Ti(x)); }
+      else return;
+      c.setPointerCapture(e.pointerId); e.preventDefault();
+    });
+    c.addEventListener('pointermove', e => {
+      const { x, y } = pos(e);
+      if (!this.drag){
+        const r = this.rowAt(y);
+        c.style.cursor = this.o.editable && r >= 0 ? (this.spikeAt(r,x) >= 0 ? 'ew-resize' : 'copy') : (this.o.cursor ? 'col-resize' : 'default');
+        return;
+      }
+      if (this.drag.cursor) return this.setT(this.Ti(x));
+      const { r, i } = this.drag, row = this.rows[r];
+      this.trains[r][i] = clampT(this.Ti(x));
+      this.drag.off = Math.abs(y - (row.y + row.h/2)) > 46;
+      this.update();
+    });
+    const end = () => { if (this.drag && this.drag.off){ this.trains[this.drag.r].splice(this.drag.i,1); this.update(); } this.drag = null; };
+    c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
+    c.addEventListener('dblclick', e => {
+      if (!this.o.editable) return; const { x, y } = pos(e), r = this.rowAt(y); if (r < 0) return;
+      const i = this.spikeAt(r, x); if (i >= 0){ this.trains[r].splice(i,1); this.update(); }
+    });
+  }
+
+  /* ----- drawing helpers ----- */
+  text(s, x, y, color, align='left', size=12, base='alphabetic'){
+    const g = this.ctx; g.font = `${size}px system-ui,sans-serif`; g.fillStyle = color; g.textAlign = align; g.textBaseline = base; g.fillText(s, x, y);
+  }
+  // label like  x_P  or Δt_F  with a subscript
+  sub(main, s, x, y, color, align='center'){
+    const g = this.ctx; g.font = 'italic 13px system-ui,sans-serif'; const w1 = g.measureText(main).width;
+    g.font = '10px system-ui,sans-serif'; const w2 = g.measureText(s).width, w = w1 + w2 + 1;
+    let x0 = align === 'center' ? x - w/2 : align === 'right' ? x - w : x;
+    this.text(main, x0, y, color, 'left', 13); g.font = 'italic 13px system-ui,sans-serif';
+    this.ctx.font = '10px system-ui,sans-serif'; this.ctx.fillText(s, x0 + w1 + 1, y + 3);
+  }
+  bracket(x1, x2, y, color, label, sub, above){
+    const g = this.ctx; if (x2 < x1) [x1, x2] = [x2, x1];
+    g.strokeStyle = color; g.lineWidth = 1.5; g.beginPath();
+    g.moveTo(x1, y-4); g.lineTo(x1, y+4); g.moveTo(x2, y-4); g.lineTo(x2, y+4); g.moveTo(x1, y); g.lineTo(x2, y); g.stroke();
+    if (label && x2 - x1 > 18) this.sub(label, sub, (x1+x2)/2, above ? y - 6 : y + 15, color);
+  }
+
+  draw(){
+    const g = this.ctx, o = this.o, T = this.T, N = this.trains.length, two = N === 2;
+    g.clearRect(0, 0, this.W, this.H);
+    const t = o.t;
+    const L = two ? local(this.P, t) : null;
+    const cols = two ? [COL.c1, COL.c2] : null;
+
+    // rows
+    this.rows.forEach((row, r) => {
+      const cy = row.y + row.h/2;
+      g.strokeStyle = COL.grid; g.lineWidth = 1; g.beginPath(); g.moveTo(this.L, cy); g.lineTo(this.R, cy); g.stroke();
+      if (two){
+        this.text(String(r+1), this.L - 14, cy, cols[r], 'right', 13, 'middle');
+        if (o.isi && L){ const K = r ? L.B : L.A;
+          g.fillStyle = alpha(cols[r], .10); g.fillRect(this.X(K.tP), row.y, this.X(K.tF) - this.X(K.tP), row.h); }
+      } else if (N <= 30 && (r % Math.ceil(N/10) === 0)) this.text(String(r+1), this.L - 10, cy, COL.muted, 'right', 10, 'middle');
+    });
+    // aux spikes
+    if (two && o.aux) this.rows.forEach((row, r) => {
+      g.strokeStyle = cols[r]; g.lineWidth = 1.5; g.setLineDash([3,3]);
+      for (const x of [this.X(0), this.X(T)]){ g.beginPath(); g.moveTo(x, row.y+3); g.lineTo(x, row.y+row.h-3); g.stroke(); }
+      g.setLineDash([]);
+    });
+    // spikes
+    this.rows.forEach((row, r) => {
+      g.strokeStyle = two ? cols[r] : COL.ink; g.lineWidth = two ? 2.5 : Math.max(1.5, Math.min(2.5, row.h/8)); g.lineCap = 'round';
+      for (const s of this.trains[r]){
+        if (o.futureFade && s > t) g.globalAlpha = .18;
+        const x = this.X(s); g.beginPath(); g.moveTo(x, row.y + 3); g.lineTo(x, row.y + row.h - 3); g.stroke();
+        g.globalAlpha = 1;
+      }
+    });
+    // corners, brackets, deltas
+    if (two && L){
+      const K = [L.A, L.B], P = this.P, other = [P.b, P.a];
+      if (o.isi) K.forEach((k, r) => {
+        const row = this.rows[r], y = r ? row.y + row.h + 12 : row.y - 10;
+        this.bracket(this.X(k.tP), this.X(t), y, cols[r], 'x', 'P', !r);
+        this.bracket(this.X(t), this.X(k.tF), y, cols[r], 'x', 'F', !r);
+      });
+      if (o.deltas) K.forEach((k, r) => {
+        const row = this.rows[r], ys = r ? [row.y - 18, row.y - 7] : [row.y + row.h + 7, row.y + row.h + 18];
+        [[k.tP, 'P'], [k.tF, 'F']].forEach(([ts, w], j) => {
+          const m = other[r][nearestIdx(other[r], ts)], y = ys[j];
+          g.setLineDash([2,3]); g.strokeStyle = alpha(cols[1-r], .6); g.lineWidth = 1;
+          const orow = this.rows[1-r]; g.beginPath(); g.moveTo(this.X(m), y); g.lineTo(this.X(m), r ? orow.y + orow.h : orow.y); g.stroke(); g.setLineDash([]);
+          if (Math.abs(this.X(m) - this.X(ts)) < 1.5){ g.fillStyle = cols[r]; g.beginPath(); g.arc(this.X(ts), y, 2.5, 0, 7); g.fill(); }
+          else this.bracket(this.X(ts), this.X(m), y, cols[r]);
+          const lx = Math.max(this.X(ts), this.X(m)) + 4;
+          if (lx < this.R - 30) this.sub('Δt', w, lx, y + 4, cols[r], 'left');
+        });
+      });
+      if (o.corners) K.forEach((k, r) => {
+        const row = this.rows[r];
+        [[k.tP, k.xF/k.isi], [k.tF, k.xP/k.isi]].forEach(([ts, wgt]) => {
+          const x = this.X(ts); g.strokeStyle = cols[r]; g.lineWidth = 4; g.beginPath(); g.moveTo(x, row.y+2); g.lineTo(x, row.y+row.h-2); g.stroke();
+          const rad = o.weights ? 2 + 6*wgt : 3.5, cy = r ? row.y + row.h + 1 : row.y - 1;
+          g.fillStyle = cols[r]; g.strokeStyle = COL.bg; g.lineWidth = 2; g.beginPath(); g.arc(x, cy, rad, 0, 7); g.fill(); g.stroke();
+        });
+      });
+    }
+    if (o.futureFade){ g.fillStyle = alpha(COL.panel, .55); g.fillRect(this.X(t), this.rows[0].y - 4, this.R - this.X(t) + 4, this.trainsBottom - this.rows[0].y + 4); }
+
+    // plot
+    if (this.plotR){
+      const p = this.plotR; let ymax = 1;
+      if (o.plot === 'S12'){ ymax = Math.max(0.05, ...this.P.da, ...this.P.db)*1.12; }
+      // grid
+      const ticks = o.plot === 'S12' ? [0, ymax/2.24, ymax/1.12] : [0, .5, 1];
+      ticks.forEach(v => { const y = this.Y(v, ymax); g.strokeStyle = COL.grid; g.lineWidth = 1; g.beginPath(); g.moveTo(this.L, y); g.lineTo(this.R, y); g.stroke();
+        this.text(o.plot === 'S12' ? f2(v) : String(v), this.L - 6, y, COL.muted, 'right', 11, 'middle'); });
+      const line = (pts, color, w=2, dash=null, upto=Infinity) => {
+        g.strokeStyle = color; g.lineWidth = w; g.lineJoin = 'round'; g.setLineDash(dash || []); g.beginPath(); let first = true;
+        for (const [tt, v] of pts){ if (tt > upto) break; const x = this.X(tt), y = this.Y(v, ymax); first ? g.moveTo(x,y) : g.lineTo(x,y); first = false; }
+        g.stroke(); g.setLineDash([]);
+      };
+      let cur = null;
+      if (o.plot === 'S12'){
+        line(this.P.a.map((x,i) => [x, this.P.da[i]]), COL.c1);
+        line(this.P.b.map((x,i) => [x, this.P.db[i]]), COL.c2);
+        cur = [[L.A.S, COL.c1], [L.B.S, COL.c2]];
+      } else if (o.plot === 'S'){
+        const pts = this.prof.pts.map(q => [q[0], q[1]]);
+        if (o.area){
+          g.fillStyle = alpha(COL.ink, .09); g.beginPath(); g.moveTo(this.X(0), this.Y(0,1));
+          for (const [tt, v] of pts) g.lineTo(this.X(tt), this.Y(v,1)); g.lineTo(this.X(T), this.Y(0,1)); g.fill();
+          const yD = this.Y(this.D, 1); g.strokeStyle = COL.ink2; g.lineWidth = 1; g.setLineDash([5,4]);
+          g.beginPath(); g.moveTo(this.L, yD); g.lineTo(this.R, yD); g.stroke(); g.setLineDash([]);
+          this.text('= ' + f3(this.D), this.R - 2, yD - 6, COL.ink2, 'right', 12); this.sub('D', 'S', this.R - 46, yD - 6, COL.ink2, 'right');
+        }
+        if (o.showSp) line(this.prof.pts.map(q => [q[0], q[2]]), COL.accent, 2, [5,4]);
+        line(pts, COL.ink);
+        cur = [[L.S, COL.ink]];
+        if (o.showSp) cur.push([L.Sp, COL.accent]);
+      } else if (o.plot === 'Sa'){
+        const pts = Array.from(this.gT, (tt, g2) => [tt, this.gS[g2]]);
+        g.fillStyle = alpha(COL.ink, .09); g.beginPath(); g.moveTo(this.X(0), this.Y(0,1));
+        for (const [tt, v] of pts) g.lineTo(this.X(tt), this.Y(v,1)); g.lineTo(this.X(T), this.Y(0,1)); g.fill();
+        line(pts, COL.ink);
+        let s = 0; for (const P of this.pairs) s += local(P, t).S; cur = [[s/this.pairs.length, COL.ink]];
+      } else if (o.plot === 'Sr'){
+        line(this.prof.pts.map(q => [q[0], q[1]]), COL.muted, 1.5, [5,4]);
+        const raw = Array.from(this.srT, (tt, k) => [tt, this.sr[k]]);
+        if (o.win > 0){
+          line(raw, alpha(COL.ink, .3), 1.5, null, t);
+          line(Array.from(this.srT, (tt, k) => [tt, this.srs[k]]), COL.accent, 2.5, null, t);
+        } else line(raw, COL.ink, 2, null, t);
+        g.fillStyle = alpha(COL.panel, .55); g.fillRect(this.X(t), p.y, this.R - this.X(t), p.h);
+        const k = Math.min(this.sr.length-1, Math.floor(t/T*this.sr.length));
+        cur = [[o.win > 0 ? this.srs[k] : this.sr[k], o.win > 0 ? COL.accent : COL.ink]];
+      }
+      // x axis
+      const step = T <= 12 ? 1 : T <= 25 ? 2 : 5;
+      for (let v = 0; v <= T + 1e-9; v += step) this.text(String(v), this.X(v), p.y + p.h + 15, COL.muted, 'center', 11);
+      if (cur && o.cursor) cur.forEach(([v, c]) => { g.fillStyle = c; g.strokeStyle = COL.bg; g.lineWidth = 2; g.beginPath(); g.arc(this.X(t), this.Y(v, ymax), 4.5, 0, 7); g.fill(); g.stroke(); });
+    } else {
+      const step = T <= 12 ? 1 : 2;
+      for (let v = 0; v <= T + 1e-9; v += step) this.text(String(v), this.X(v), this.trainsBottom + 16, COL.muted, 'center', 11);
+    }
+    // cursor
+    if (o.cursor){
+      const x = this.X(t), bottom = this.plotR ? this.plotR.y + this.plotR.h : this.trainsBottom;
+      g.strokeStyle = COL.ink2; g.lineWidth = 1; g.setLineDash([3,3]); g.beginPath(); g.moveTo(x, 18); g.lineTo(x, bottom); g.stroke(); g.setLineDash([]);
+      g.fillStyle = COL.ink; g.beginPath(); g.arc(x, 12, 6, 0, 7); g.fill();
+      x > this.R - 20 ? this.text('t', x - 10, 16, COL.ink, 'right', 14) : this.text('t', x + 10, 16, COL.ink, 'left', 14);
+    }
+  }
+}
+function redrawAll(){ readCols(); FIGS.forEach(f => f.draw()); EXTRA.forEach(fn => fn()); }
+const EXTRA = [];
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redrawAll);
+new MutationObserver(redrawAll).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+/* ---------- presets ---------- */
+const BASE = [[1.2, 2.9, 4.1, 5.6, 6.3, 7.8, 9.0], [1.5, 2.7, 4.6, 6.1, 8.3, 8.9]];
+const PRESETS = {
+  'drift': () => { const a = [], b = []; for (let i = 1; i < 20; i++){ const t = i*0.5; a.push(t); b.push(t + 0.24*Math.sin(Math.PI*t/10)); } return [a, b]; },
+  'identical': () => { const a = [0.8, 1.9, 3.3, 4.0, 5.5, 6.7, 7.2, 8.6]; return [a, a.slice()]; },
+  'constant shift': () => { const a = [0.8, 1.9, 3.3, 4.0, 5.5, 6.7, 7.2, 8.6]; return [a, a.map(x => x + 0.2)]; },
+  'independent': () => { const r = rng(7); return [poisson(r, 1.4, 0, 10), poisson(r, 1.4, 0, 10)]; },
+  'rate 2 : 1': () => { const a = [], b = []; for (let i = 1; i < 10; i++){ a.push(i); b.push(i, i + 0.5); } return [a, b.filter(x => x < 10)]; },
+  'bursts vs regular': () => { const a = [], b = []; for (const c of [1.5, 4.5, 7.5]) a.push(c, c + .15, c + .3); for (let i = 1; i < 10; i++) b.push(i); return [a, b]; },
+  'one missing spike': () => { const a = [1, 2, 3, 4, 5, 6, 7, 8, 9]; return [a, a.filter(x => x !== 5)]; },
+  'empty': () => [[], []],
+};
+
+/* ---------- hero ---------- */
+const hero = new Fig(document.getElementById('hero'), { trains: PRESETS.drift(), cursor: true, plot: 'S', area: true, editable: true, t: 0 });
+{
+  let on = true, t0 = performance.now();
+  hero.onTouch = () => { on = false; };
+  const tick = now => { if (!on) return; hero.setT(10*(0.5 - 0.5*Math.cos((now - t0)/4000))); requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+}
+
+/* ---------- 1 ---------- */
+new Fig(document.getElementById('f1'), { trains: BASE, editable: true });
+
+/* ---------- 2 ---------- */
+const sym = (n, s, k) => `<i>${n}</i><sub>${s}</sub><sup>(${k})</sup>`;
+const f2fig = new Fig(document.getElementById('f2'), { trains: BASE, cursor: true, aux: true, corners: true, isi: true, editable: true, t: 4.3 });
+f2fig.hooks.push(f => { const L = local(f.P, f.o.t);
+  document.getElementById('r2').innerHTML = `<b>t = ${f2(f.o.t)}</b><br>` + [L.A, L.B].map((k, i) =>
+    `<span class="c${i+1}">train ${i+1}</span>  ${sym('t','P',i+1)} = ${f2(k.tP)}   ${sym('t','F',i+1)} = ${f2(k.tF)}   ${sym('x','ISI',i+1)} = ${f2(k.isi)}`).join('<br>'); });
+f2fig.update();
+
+/* ---------- 3 ---------- */
+const f3fig = new Fig(document.getElementById('f3'), { trains: BASE, cursor: true, aux: true, corners: true, deltas: true, editable: true, t: 4.3 });
+f3fig.hooks.push(f => { const L = local(f.P, f.o.t);
+  document.getElementById('r3').innerHTML = [L.A, L.B].map((k, i) =>
+    `<span class="c${i+1}">train ${i+1}</span>  Δ${sym('t','P',i+1)} = ${f2(k.dP)}   Δ${sym('t','F',i+1)} = ${f2(k.dF)}`).join('<br>'); });
+f3fig.update();
+
+/* ---------- 4 ---------- */
+const f4fig = new Fig(document.getElementById('f4'), { trains: BASE, cursor: true, aux: true, corners: true, weights: true, deltas: true, plot: 'S12', editable: true, t: 4.3 });
+f4fig.hooks.push(f => { const L = local(f.P, f.o.t);
+  document.getElementById('r4').innerHTML = [L.A, L.B].map((k, i) =>
+    `<span class="c${i+1}">S<sub>${i+1}</sub></span> = (${f2(k.dP)}·${f2(k.xF)} + ${f2(k.dF)}·${f2(k.xP)}) / ${f2(k.isi)} = <b>${f3(k.S)}</b>`).join('<br>'); });
+f4fig.update();
+
+/* ---------- 5 ---------- */
+const f5fig = new Fig(document.getElementById('f5'), { trains: BASE, cursor: true, aux: true, corners: true, plot: 'S', editable: true, t: 4.3 });
+f5fig.hooks.push(f => { const L = local(f.P, f.o.t), m = (L.A.isi + L.B.isi)/2;
+  document.getElementById('r5').innerHTML =
+    `S = (${f3(L.A.S)}·${f2(L.B.isi)} + ${f3(L.B.S)}·${f2(L.A.isi)}) / (2·${f3(m)}²) = <b class="big">${f3(L.S)}</b>` +
+    (f.o.showSp ? `<br>S′ = ${f3(L.Sp)}` : ''); });
+document.getElementById('sp5').addEventListener('change', e => { f5fig.o.showSp = e.target.checked;
+  document.getElementById('lg5').style.display = e.target.checked ? '' : 'none'; f5fig.update(); });
+f5fig.update();
+
+/* ---------- 6 ---------- */
+const f6fig = new Fig(document.getElementById('f6'), { trains: BASE, cursor: true, plot: 'S', area: true, editable: true, t: 4.3 });
+f6fig.hooks.push(f => { document.getElementById('r6').innerHTML = `<span class="big">D<sub>S</sub> = <b>${f3(f.D)}</b></span>   (area under S(t), divided by T = ${f.T})`; });
+f6fig.update();
+
+// jitter experiment
+const JT = 20;
+function jitterPair(seed, sigma){
+  const r = rng(seed), a = []; let t = 0;
+  for(;;){ t += 0.4 + -Math.log(r()+1e-12)*0.6; if (t >= JT) break; a.push(t); }   // mean ISI = 1
+  const b = a.map(x => x + sigma*gauss(r)).filter(x => x > 0 && x < JT);
+  return [a, b];
+}
+const SIGMAS = Array.from({ length: 41 }, (_, i) => i*0.025);
+const CURVE = SIGMAS.map(s => { let d = 0; for (let k = 0; k < 30; k++){ const [a, b] = jitterPair(100 + k, s); d += profile(pair(a, b, JT)).D; } return d/30; });
+let sigma = 0.2;
+const f6b = new Fig(document.getElementById('f6b'), { trains: jitterPair(3, sigma), T: JT, plot: 'S', area: true, plotH: 120 });
+const cv = document.querySelector('#f6c canvas'), cg = cv.getContext('2d');
+function drawCurve(){
+  const W = cv.parentElement.clientWidth || 300, H = 230, dpr = window.devicePixelRatio || 1;
+  cv.width = W*dpr; cv.height = H*dpr; cv.style.height = H + 'px'; cg.setTransform(dpr,0,0,dpr,0,0); cg.clearRect(0,0,W,H);
+  const L = 40, R = W - 12, Tp = 14, B = H - 34, X = s => L + (R-L)*s, Y = d => B - (B-Tp)*d/0.6;
+  cg.font = '11px system-ui,sans-serif'; cg.textBaseline = 'middle';
+  for (const d of [0, .2, .4, .6]){ cg.strokeStyle = COL.grid; cg.lineWidth = 1; cg.beginPath(); cg.moveTo(L, Y(d)); cg.lineTo(R, Y(d)); cg.stroke();
+    cg.fillStyle = COL.muted; cg.textAlign = 'right'; cg.fillText(d.toFixed(1), L - 6, Y(d)); }
+  cg.textAlign = 'center'; cg.textBaseline = 'alphabetic';
+  for (const s of [0, .25, .5, .75, 1]) cg.fillText(String(s), X(s), B + 15);
+  cg.fillStyle = COL.ink2; cg.font = 'italic 13px system-ui,sans-serif'; cg.fillText('σ / ⟨ISI⟩', (L+R)/2, H - 2);
+  cg.save(); cg.translate(12, (Tp+B)/2); cg.rotate(-Math.PI/2); cg.fillText('D_S', 0, 0); cg.restore();
+  cg.strokeStyle = COL.ink; cg.lineWidth = 2; cg.beginPath(); SIGMAS.forEach((s, i) => i ? cg.lineTo(X(s), Y(CURVE[i])) : cg.moveTo(X(s), Y(CURVE[i]))); cg.stroke();
+  cg.strokeStyle = COL.ink2; cg.setLineDash([3,3]); cg.lineWidth = 1; cg.beginPath(); cg.moveTo(X(sigma), Tp); cg.lineTo(X(sigma), B); cg.stroke(); cg.setLineDash([]);
+  cg.fillStyle = COL.c1; cg.strokeStyle = COL.bg; cg.lineWidth = 2; cg.beginPath(); cg.arc(X(sigma), Y(f6b.D), 5.5, 0, 7); cg.fill(); cg.stroke();
+  cg.fillStyle = COL.ink; cg.font = '13px system-ui,sans-serif'; cg.textAlign = X(sigma) > (L+R)/2 ? 'right' : 'left';
+  cg.fillText(`σ = ${sigma.toFixed(2)}   D = ${f3(f6b.D)}`, X(sigma) + (X(sigma) > (L+R)/2 ? -10 : 10), Tp + 10);
+  cv._map = x => Math.max(0, Math.min(1, (x - L)/(R - L)));
+}
+EXTRA.push(drawCurve);
+new ResizeObserver(drawCurve).observe(cv.parentElement);
+{
+  let down = false; cv.style.cursor = 'col-resize';
+  const set = e => { const b = cv.getBoundingClientRect(); sigma = Math.round(cv._map(e.clientX - b.left)*100)/100; f6b.setTrains(jitterPair(3, sigma)); drawCurve(); };
+  cv.addEventListener('pointerdown', e => { down = true; cv.setPointerCapture(e.pointerId); set(e); });
+  cv.addEventListener('pointermove', e => down && set(e));
+  cv.addEventListener('pointerup', () => down = false);
+}
+
+/* ---------- 7 playground ---------- */
+const f7fig = new Fig(document.getElementById('f7'), { trains: PRESETS.drift(), cursor: true, aux: true, corners: true, deltas: true, plot: 'S', area: true, editable: true, t: 5 });
+f7fig.hooks.push(f => { const L = local(f.P, f.o.t);
+  document.getElementById('r7').innerHTML = `S(t = ${f2(f.o.t)}) = <b>${f3(L.S)}</b>      <span class="big">D<sub>S</sub> = <b>${f3(f.D)}</b></span>`; });
+{
+  const box = document.getElementById('pre7'); let btns = [];
+  for (const name of Object.keys(PRESETS)){
+    const b = document.createElement('button'); b.textContent = name; box.appendChild(b); btns.push(b);
+    b.onclick = () => { btns.forEach(x => x.classList.toggle('on', x === b)); f7fig.setTrains(PRESETS[name]()); };
+  }
+  btns[0].classList.add('on');
+  const opt = (id, k) => document.getElementById(id).addEventListener('change', e => { f7fig.o[k] = e.target.checked; f7fig.update(); });
+  opt('o7c', 'corners'); opt('o7d', 'deltas'); opt('o7a', 'area');
+}
+f7fig.update();
+
+/* ---------- 8 multivariate ---------- */
+const M8 = { mode: 'events', N: 12, jit: 0.08, noise: 0.5, seed: 1 };
+function gen8(){
+  const r = rng(M8.seed), N = M8.N, out = [];
+  if (M8.mode === 'events'){
+    for (let n = 0; n < N; n++){ const s = poisson(r, M8.noise + 1e-9, 0, 10); for (let e = 1; e < 10; e++) s.push(e + M8.jit*gauss(r)); out.push(s.filter(x => x > 0 && x < 10)); }
+    return { trains: out, T: 10 };
+  }
+  if (M8.mode === 'Kreuz Fig. 2B'){
+    const ev1 = [1, 2, 3, 4], j1 = [0.01, 0.06, 0.12, 0.2], ev2 = Array.from({ length: 10 }, (_, k) => 5.25 + 0.5*k);
+    for (let n = 0; n < N; n++){
+      const s = poisson(r, 2.5, 0, 5); ev1.forEach((e, k) => s.push(e + j1[k]*gauss(r)));
+      ev2.forEach((e, k) => s.push(e + 0.12*(1 - k/9)*gauss(r))); out.push(s.filter(x => x > 0 && x < 10));
+    }
+    return { trains: out, T: 10 };
+  }
+  // clusters: a different grouping in each 2-unit window
+  const groupings = [n => n % 2, n => n < N/2 ? 0 : 1, () => 0, n => n];
+  for (let n = 0; n < N; n++) out.push([]);
+  groupings.forEach((gfn, w) => {
+    const ev = {};
+    for (let n = 0; n < N; n++){ const gid = gfn(n);
+      if (!(gid in ev)){ ev[gid] = []; let t = 2*w; for(;;){ t += 0.2 + -Math.log(r()+1e-12)*0.25; if (t >= 2*w + 2) break; ev[gid].push(t); } }
+      for (const e of ev[gid]) out[n].push(e + 0.01*gauss(r));
+    }
+  });
+  return { trains: out.map(s => s.filter(x => x > 0 && x < 8)), T: 8 };
+}
+const g8 = gen8();
+const f8fig = new Fig(document.getElementById('f8'), { trains: g8.trains, T: g8.T, cursor: true, plot: 'Sa', plotH: 130, t: 3.0 });
+const mc = document.querySelector('#f8m canvas'), mg = mc.getContext('2d'), tip = document.getElementById('tip8');
+let mcells = [];
+function drawMatrix(){
+  const f = f8fig, N = f.trains.length, W = mc.parentElement.clientWidth || 600, dpr = window.devicePixelRatio || 1;
+  const gap = 28, side = Math.min(260, (W - gap - 50)/2), H = side + 48;
+  mc.width = W*dpr; mc.height = H*dpr; mc.style.height = H + 'px'; mg.setTransform(dpr,0,0,dpr,0,0); mg.clearRect(0,0,W,H);
+  const now = Array.from({ length: N }, () => new Float64Array(N)), avg = Array.from({ length: N }, () => new Float64Array(N));
+  for (const P of f.pairs){ const s = local(P, f.o.t).S; now[P.i][P.j] = now[P.j][P.i] = s; avg[P.i][P.j] = avg[P.j][P.i] = P.D; }
+  mcells = [];
+  const panels = [[now, `at t = ${f2(f.o.t)}`], [avg, 'averaged over time']];
+  panels.forEach(([M, title], k) => {
+    const x0 = k*(side + gap), y0 = 22, c = side/N;
+    mg.fillStyle = COL.ink2; mg.font = '13px system-ui,sans-serif'; mg.textAlign = 'left'; mg.textBaseline = 'alphabetic'; mg.fillText(title, x0, 15);
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++){
+      mg.fillStyle = ramp(M[i][j]/0.5); mg.fillRect(x0 + j*c, y0 + i*c, Math.max(1, c - (c > 6 ? 1 : 0)), Math.max(1, c - (c > 6 ? 1 : 0)));
+      mcells.push([x0 + j*c, y0 + i*c, c, i, j, M[i][j], k]);
+    }
+  });
+  // legend
+  const lx = 2*side + gap + 14, ly = 22, lh = side;
+  if (lx + 34 < W){
+    for (let i = 0; i < lh; i++){ mg.fillStyle = ramp(i/lh); mg.fillRect(lx, ly + i, 10, 1.5); }
+    mg.fillStyle = COL.muted; mg.font = '11px system-ui,sans-serif'; mg.textAlign = 'left';
+    mg.fillText('0', lx + 14, ly + 8); mg.fillText('≥0.5', lx + 14, ly + lh); mg.fillText('S', lx, ly - 6);
+  }
+  mg.fillStyle = COL.muted; mg.font = '12px system-ui,sans-serif'; mg.textAlign = 'left';
+  mg.fillText('light = synchronous, dark = dissimilar · hover a cell', 0, H - 6);
+}
+mc.addEventListener('pointermove', e => {
+  const b = mc.getBoundingClientRect(), x = e.clientX - b.left, y = e.clientY - b.top;
+  const hit = mcells.find(q => x >= q[0] && x < q[0] + q[2] && y >= q[1] && y < q[1] + q[2]);
+  if (!hit || hit[3] === hit[4]){ tip.style.display = 'none'; return; }
+  tip.style.display = 'block'; tip.textContent = `neurons ${hit[3]+1} & ${hit[4]+1}: ${f3(hit[5])}`;
+  tip.style.left = Math.min(x + 12, b.width - 150) + 'px'; tip.style.top = (y - 30) + 'px';
+});
+mc.addEventListener('pointerleave', () => tip.style.display = 'none');
+EXTRA.push(drawMatrix);
+new ResizeObserver(drawMatrix).observe(mc.parentElement);
+f8fig.hooks.push(f => { drawMatrix(); let s = 0; for (const P of f.pairs) s += local(P, f.o.t).S;
+  document.getElementById('r8').innerHTML = `S<sup>a</sup>(t) = <b>${f3(s/f.pairs.length)}</b>      <span class="big">D<sub>S</sub><sup>a</sup> = <b>${f3(f.D)}</b></span>   (${f.pairs.length} pairs)`; });
+{
+  const pre = document.getElementById('pre8'), ctl = document.getElementById('ctl8'), btns = [];
+  const regen = () => { const g = gen8(); f8fig.setTrains(g.trains, g.T); };
+  for (const m of ['events', 'Kreuz Fig. 2B', 'clusters']){
+    const b = document.createElement('button'); b.textContent = m; pre.appendChild(b); btns.push(b);
+    b.onclick = () => { M8.mode = m; btns.forEach(x => x.classList.toggle('on', x === b)); ctl.querySelectorAll('.ev').forEach(el => el.style.display = m === 'events' ? '' : 'none');
+      if (m === 'clusters') f8fig.o.t = 1; regen(); };
+  }
+  btns[0].classList.add('on');
+  const slider = (label, key, min, max, step, cls) => {
+    const l = document.createElement('label'); if (cls) l.className = cls;
+    l.innerHTML = `${label} <input type="range" min="${min}" max="${max}" step="${step}" value="${M8[key]}"> <span>${M8[key]}</span>`;
+    const inp = l.querySelector('input'), out = l.querySelector('span');
+    inp.oninput = () => { M8[key] = +inp.value; out.textContent = inp.value; regen(); };
+    ctl.appendChild(l);
+  };
+  slider('neurons', 'N', 3, 30, 1);
+  slider('jitter σ', 'jit', 0, 0.5, 0.01, 'ev');
+  slider('background rate', 'noise', 0, 3, 0.1, 'ev');
+  const nb = document.createElement('button'); nb.textContent = '↻ resample'; nb.onclick = () => { M8.seed++; regen(); }; ctl.appendChild(nb);
+}
+f8fig.update();
+
+/* ---------- 9 real-time ---------- */
+const f9fig = new Fig(document.getElementById('f9'), { trains: [[0.9, 2.1, 3.0, 4.4, 5.2, 6.9, 7.4, 8.8], [1.0, 2.0, 3.6, 4.5, 5.9, 7.0, 8.0, 8.7]],
+  cursor: true, plot: 'Sr', futureFade: true, editable: true, t: 10 });
+{
+  const btn = document.getElementById('play9'); let playing = false, last = 0;
+  const step = now => { if (!playing) return; const dt = (now - last)/1000; last = now;
+    const t = f9fig.o.t + dt*1.2; if (t >= 10){ f9fig.setT(10); playing = false; btn.textContent = '▶ play'; return; }
+    f9fig.setT(t); requestAnimationFrame(step); };
+  btn.onclick = () => { playing = !playing; btn.textContent = playing ? '❚❚ pause' : '▶ play';
+    if (playing){ if (f9fig.o.t >= 9.99) f9fig.setT(0); last = performance.now(); requestAnimationFrame(step); } };
+  f9fig.onTouch = () => { playing = false; btn.textContent = '▶ play'; };
+  const w = document.getElementById('w9'), wv = document.getElementById('w9v');
+  w.oninput = () => { f9fig.o.win = +w.value; wv.textContent = w.value; document.getElementById('lg9').style.display = +w.value > 0 ? '' : 'none'; f9fig.update(); };
+}
+f9fig.update();
+</script>
+</body>
+</html>
